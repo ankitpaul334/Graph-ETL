@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>Python Tech Calendar</title>
+    <link>https://example.org/events</link>
+    <item>
+      <title>PyData London</title>
+      <link>https://example.org/events/pydata-london-2026</link>
+      <guid isPermaLink="false">pydata-london-2026</guid>
+      <pubDate>Fri, 25 Sep 2026 09:00:00 +0100</pubDate>
+      <description>A conference for Python and data systems.</description>
+      <content:encoded><![CDATA[<p>Sessions cover Python, data engineering, and machine learning.</p>]]></content:encoded>
+      <author>events@example.org</author>
+    </item>
+  </channel>
+</rss>

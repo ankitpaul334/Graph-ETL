@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Open Source Conference Feed</title>
+  <entry>
+    <title>Open Source Systems Conference</title>
+    <id>oss-systems-2026</id>
+    <link rel="alternate" href="https://example.org/oss-systems-2026" />
+    <published>2026-10-01T09:30:00+01:00</published>
+    <updated>2026-10-02T11:00:00+01:00</updated>
+    <summary>Practical sessions on open-source infrastructure.</summary>
+    <content type="html">&lt;p&gt;Two days of engineering talks.&lt;/p&gt;</content>
+    <author>
+      <name>Program Committee</name>
+    </author>
+  </entry>
+</feed>

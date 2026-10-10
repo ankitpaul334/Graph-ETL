@@ -11,6 +11,7 @@ class RssAtomFeedParser:
         "title",
         "link",
         "identifier",
+        "event_date",
         "published_at",
         "updated_at",
         "summary",
@@ -81,6 +82,7 @@ class RssAtomFeedParser:
         if feed_format == "atom":
             self._add_child_text(values, entry, "title", f"{item_path}/title")
             self._add_atom_link(values, entry, item_path)
+            self._add_event_dates(values, entry, item_path)
             self._add_child_text(
                 values,
                 entry,
@@ -121,6 +123,7 @@ class RssAtomFeedParser:
                 f"{item_path}/guid",
                 field_name="identifier",
             )
+            self._add_event_dates(values, entry, item_path)
             self._add_rss_date(values, entry, item_path)
             self._add_child_text(
                 values,
@@ -158,6 +161,21 @@ class RssAtomFeedParser:
 
         external_id = self._entry_external_id(values, content_sha256)
         return ParsedEntry(external_id, content_sha256, index, tuple(fields))
+
+    def _add_event_dates(
+        self,
+        values: dict[str, list[FieldValue]],
+        entry: ET.Element,
+        item_path: str,
+    ) -> None:
+        for name in ("event_date", "eventDate", "startDate", "start_date", "start_at"):
+            for child in self._children(entry, name):
+                self._add_text(
+                    values,
+                    "event_date",
+                    self._element_text(child),
+                    f"{item_path}/{name}",
+                )
 
     def _add_rss_date(
         self,

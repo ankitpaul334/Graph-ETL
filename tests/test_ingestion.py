@@ -177,6 +177,12 @@ class IngestionServiceTests(unittest.TestCase):
                     "SELECT COUNT(*) FROM raw_documents"
                 ).fetchone()[0],
             )
+            self.assertEqual(
+                2,
+                database.connection.execute(
+                    "SELECT COUNT(*) FROM document_observations"
+                ).fetchone()[0],
+            )
 
     def test_changed_document_reuses_unchanged_item_observation(self) -> None:
         payload = (
@@ -207,6 +213,12 @@ class IngestionServiceTests(unittest.TestCase):
                 2,
                 database.connection.execute(
                     "SELECT COUNT(*) FROM raw_documents"
+                ).fetchone()[0],
+            )
+            self.assertEqual(
+                4,
+                database.connection.execute(
+                    "SELECT COUNT(*) FROM document_observations"
                 ).fetchone()[0],
             )
 

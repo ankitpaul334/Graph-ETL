@@ -1,0 +1,54 @@
+{
+  "external_id": "fixture-event-1",
+  "fields": [
+    {
+      "name": "title",
+      "field_ordinal": 0,
+      "raw_value": "  Example   Conference  ",
+      "locator": "fixture:item/title",
+      "is_present": true
+    },
+    {
+      "name": "published_at",
+      "field_ordinal": 0,
+      "raw_value": "Fri, 25 Sep 2026 09:00:00 +0100",
+      "locator": "fixture:item/pubDate",
+      "is_present": true
+    },
+    {
+      "name": "event_date",
+      "field_ordinal": 0,
+      "raw_value": "2026-11-05",
+      "locator": "fixture:item/eventDate[1]",
+      "is_present": true
+    },
+    {
+      "name": "event_date",
+      "field_ordinal": 1,
+      "raw_value": "2026-11-06T09:00:00+01:00",
+      "locator": "fixture:item/eventDate[2]",
+      "is_present": true
+    },
+    {
+      "name": "venue",
+      "field_ordinal": 0,
+      "raw_value": "Example Hall",
+      "locator": "fixture:item/venue",
+      "is_present": true
+    },
+    {
+      "name": "cancellation_status",
+      "field_ordinal": 0,
+      "raw_value": "scheduled",
+      "locator": "fixture:item/cancellationStatus",
+      "is_present": true
+    },
+    {
+      "name": "content",
+      "field_ordinal": 0,
+      "raw_value": "Two days of engineering talks.",
+      "locator": "fixture:item/description",
+      "is_present": true
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+[
+  {
+    "name": "date_only",
+    "raw_value": "2026-11-05",
+    "status": "date_only",
+    "normalized_value": "2026-11-05",
+    "source_timezone": null
+  },
+  {
+    "name": "iso_week_date",
+    "raw_value": "2026-W45-5",
+    "status": "date_only",
+    "normalized_value": "2026-11-06",
+    "source_timezone": null
+  },
+  {
+    "name": "invalid_offset",
+    "raw_value": "2026-11-05+02:00",
+    "status": "invalid",
+    "normalized_value": null,
+    "source_timezone": "+02:00"
+  },
+  {
+    "name": "unsupported_named_zone",
+    "raw_value": "Thu, 06 Nov 2026 09:00:00 CET",
+    "status": "invalid",
+    "normalized_value": null,
+    "source_timezone": "CET"
+  },
+  {
+    "name": "offset_aware",
+    "raw_value": "2026-11-06T09:00:00+01:00",
+    "status": "normalized",
+    "normalized_value": "2026-11-06T08:00:00Z",
+    "source_timezone": "+01:00"
+  },
+  {
+    "name": "rfc_offset",
+    "raw_value": "Fri, 25 Sep 2026 09:00:00 +0100",
+    "status": "normalized",
+    "normalized_value": "2026-09-25T08:00:00Z",
+    "source_timezone": "+01:00"
+  },
+  {
+    "name": "timezone_ambiguous",
+    "raw_value": "2026-11-06T09:00:00",
+    "status": "timezone_ambiguous",
+    "normalized_value": null,
+    "source_timezone": null
+  },
+  {
+    "name": "invalid",
+    "raw_value": "not-a-date",
+    "status": "invalid",
+    "normalized_value": null,
+    "source_timezone": null
+  },
+  {
+    "name": "missing",
+    "raw_value": null,
+    "status": "missing",
+    "normalized_value": null,
+    "source_timezone": null
+  }
+]

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:ev="https://example.org/event">
+  <channel>
+    <title>Event Date Feed</title>
+    <item>
+      <title>Recurring Summit Instances</title>
+      <guid isPermaLink="false">summit-instances</guid>
+      <ev:eventDate>2026-12-01</ev:eventDate>
+      <ev:eventDate>2026-12-02T09:00:00+00:00</ev:eventDate>
+    </item>
+  </channel>
+</rss>

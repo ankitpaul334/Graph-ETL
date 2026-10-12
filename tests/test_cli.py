@@ -1,15 +1,14 @@
 from contextlib import redirect_stderr, redirect_stdout
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import StringIO
 import json
 import sqlite3
 from pathlib import Path
 import tempfile
-import threading
 import unittest
 
 from graph_etl.cli import main
 from graph_etl.persistence.database import Database
+from helpers import loopback_feed_server
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -18,22 +17,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 class CliIngestionTests(unittest.TestCase):
     def test_ingests_feed_through_cli(self) -> None:
         payload = (FIXTURES / "rss.xml").read_bytes()
-
-        class FeedHandler(BaseHTTPRequestHandler):
-            def do_GET(self) -> None:
-                self.send_response(200)
-                self.send_header("Content-Type", "application/rss+xml")
-                self.send_header("Content-Length", str(len(payload)))
-                self.end_headers()
-                self.wfile.write(payload)
-
-            def log_message(self, format: str, *args: object) -> None:
-                del format, args
-
-        server = ThreadingHTTPServer(("127.0.0.1", 0), FeedHandler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        try:
+        with loopback_feed_server(payload) as feed_url:
             with tempfile.TemporaryDirectory() as temporary_directory:
                 database_path = Path(temporary_directory) / "graph_etl.sqlite3"
                 output = StringIO()
@@ -46,7 +30,7 @@ class CliIngestionTests(unittest.TestCase):
                             "--name",
                             "CLI Test Feed",
                             "--url",
-                            f"http://127.0.0.1:{server.server_port}/feed.xml",
+                            feed_url,
                             "--database",
                             str(database_path),
                         ]
@@ -62,29 +46,10 @@ class CliIngestionTests(unittest.TestCase):
                             "SELECT COUNT(*) FROM raw_documents"
                         ).fetchone()[0],
                     )
-        finally:
-            server.shutdown()
-            server.server_close()
-            thread.join(timeout=5)
 
     def test_extracts_and_queries_candidates_through_cli(self) -> None:
         payload = (FIXTURES / "rss.xml").read_bytes()
-
-        class FeedHandler(BaseHTTPRequestHandler):
-            def do_GET(self) -> None:
-                self.send_response(200)
-                self.send_header("Content-Type", "application/rss+xml")
-                self.send_header("Content-Length", str(len(payload)))
-                self.end_headers()
-                self.wfile.write(payload)
-
-            def log_message(self, format: str, *args: object) -> None:
-                del format, args
-
-        server = ThreadingHTTPServer(("127.0.0.1", 0), FeedHandler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        try:
+        with loopback_feed_server(payload) as feed_url:
             with tempfile.TemporaryDirectory() as temporary_directory:
                 database_path = Path(temporary_directory) / "graph_etl.sqlite3"
                 ingest_output = StringIO()
@@ -97,7 +62,7 @@ class CliIngestionTests(unittest.TestCase):
                             "--name",
                             "CLI Extract Test Feed",
                             "--url",
-                            f"http://127.0.0.1:{server.server_port}/feed.xml",
+                            feed_url,
                             "--database",
                             str(database_path),
                         ]
@@ -160,18 +125,58 @@ class CliIngestionTests(unittest.TestCase):
                             str(database_path),
                         ]
                     )
+                outcomes_output = StringIO()
+                with redirect_stdout(outcomes_output):
+                    outcomes_code = main(
+                        [
+                            "extraction-outcomes",
+                            "--database",
+                            str(database_path),
+                        ]
+                    )
+                resolutions_output = StringIO()
+                with redirect_stdout(resolutions_output):
+                    resolutions_code = main(
+                        [
+                            "resolutions",
+                            "--database",
+                            str(database_path),
+                        ]
+                    )
                 self.assertEqual(0, resolve_code)
                 self.assertEqual(0, canonical_code)
+                self.assertEqual(0, outcomes_code)
+                self.assertEqual(0, resolutions_code)
                 resolution = json.loads(resolve_output.getvalue())
                 self.assertEqual(1, resolution["unresolved"])
                 self.assertEqual(
                     0,
                     len(json.loads(canonical_output.getvalue())["events"]),
                 )
-        finally:
-            server.shutdown()
-            server.server_close()
-            thread.join(timeout=5)
+                outcomes = json.loads(outcomes_output.getvalue())["outcomes"]
+                self.assertEqual("SUCCEEDED", outcomes[0]["status"])
+                resolutions = json.loads(resolutions_output.getvalue())["resolutions"]
+                self.assertEqual("UNRESOLVED", resolutions[0]["status"])
+                review_output = StringIO()
+                with redirect_stdout(review_output):
+                    review_code = main(
+                        [
+                            "review-candidate",
+                            "--database",
+                            str(database_path),
+                            "--candidate-id",
+                            str(candidates[0]["candidate_id"]),
+                            "--action",
+                            "reject",
+                            "--reason",
+                            "not an event",
+                        ]
+                    )
+                self.assertEqual(0, review_code)
+                self.assertEqual(
+                    "REJECTED",
+                    json.loads(review_output.getvalue())["status"],
+                )
 
     def test_schema_version_error_is_reported_as_json(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

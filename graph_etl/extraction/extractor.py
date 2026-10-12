@@ -5,6 +5,7 @@ from .dates import normalize_date
 from .models import (
     CandidateDraft,
     CandidateField,
+    EventClassification,
     NormalizationStatus,
     StoredObservation,
     StoredObservationField,
@@ -24,6 +25,11 @@ _FIELD_ALIASES = {
     "source_status": ("status",),
     "summary": ("summary",),
     "description": ("content", "description"),
+    "classification": (
+        "classification",
+        "event_classification",
+        "event_type",
+    ),
     "source_identifier": ("identifier", "guid"),
     "author": ("authors", "author"),
 }
@@ -46,23 +52,94 @@ class EventCandidateExtractor:
 
     def extract(self, observation: StoredObservation) -> tuple[CandidateDraft, ...]:
         event_slots = self._event_slots(observation.fields)
+        classification, classification_reason = self._classify(observation.fields)
         drafts: list[CandidateDraft] = []
         for candidate_ordinal, event_field in enumerate(event_slots):
             fields = self._candidate_fields(observation.fields, event_field)
+            slot_key = self._slot_key(event_field)
             drafts.append(
                 CandidateDraft(
                     observation_id=observation.id,
                     candidate_ordinal=candidate_ordinal,
+                    candidate_slot_key=slot_key,
                     candidate_key=self._candidate_key(
                         observation.id,
-                        candidate_ordinal,
-                        event_field,
+                        slot_key,
                     ),
                     external_id=observation.external_id,
+                    classification=classification,
+                    classification_reason=classification_reason,
                     fields=fields,
                 )
             )
         return tuple(drafts)
+
+    def _classify(
+        self,
+        fields: tuple[StoredObservationField, ...],
+    ) -> tuple[str, str]:
+        classification_values = {
+            (field.raw_value or "").strip().lower()
+            for field in fields
+            if field.name in _FIELD_ALIASES["classification"]
+            and field.is_present
+            and (field.raw_value or "").strip()
+        }
+        if classification_values & {
+            "not_event",
+            "non-event",
+            "article",
+            "blog",
+            "news",
+            "product",
+            "documentation",
+        }:
+            return EventClassification.NOT_EVENT.value, "source marked item as non-event"
+        if classification_values & {
+            "event",
+            "conference",
+            "meetup",
+            "webinar",
+            "workshop",
+        }:
+            return (
+                EventClassification.EVENT_CONFIRMED_BY_SOURCE.value,
+                "source marked item as an event",
+            )
+        event_date_values = [
+            field
+            for field in fields
+            if field.name in _FIELD_ALIASES["event_date"]
+            and field.is_present
+            and field.raw_value
+            and field.raw_value.strip()
+            and field.name
+        ]
+        if event_date_values:
+            return (
+                EventClassification.EVENT_CONFIRMED_BY_SOURCE.value,
+                "source supplied an explicit event date",
+            )
+        return (
+            EventClassification.EVENT_POSSIBLE.value,
+            "no explicit non-event or event classification",
+        )
+
+    @staticmethod
+    def _slot_key(event_field: StoredObservationField | None) -> str:
+        if event_field is None:
+            return "no-event-date"
+        payload = json.dumps(
+            {
+                "field_name": event_field.name,
+                "locator": event_field.locator,
+                "raw_value": event_field.raw_value,
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     def _event_slots(
         self,
@@ -180,14 +257,12 @@ class EventCandidateExtractor:
     def _candidate_key(
         self,
         observation_id: int,
-        candidate_ordinal: int,
-        event_field: StoredObservationField | None,
+        candidate_slot_key: str,
     ) -> str:
         payload = json.dumps(
             {
                 "observation_id": observation_id,
-                "candidate_ordinal": candidate_ordinal,
-                "event_date": event_field.raw_value if event_field else None,
+                "candidate_slot_key": candidate_slot_key,
                 "extraction_version": self.extraction_version,
                 "normalization_version": self.normalization_version,
             },

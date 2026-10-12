@@ -1,0 +1,50 @@
+[
+  {
+    "name": "same_source_identifier",
+    "expected": "MATCH",
+    "left": {"source_key": "feed:a", "external_id": "event-1", "title": "PyData", "event_date": "2026-11-05"},
+    "right": {"source_key": "feed:a", "external_id": "event-1", "title": "PyData 2026", "event_date": "2026-11-05"}
+  },
+  {
+    "name": "same_normalized_url",
+    "expected": "MATCH",
+    "left": {"source_key": "feed:a", "external_id": "a", "title": "PyData", "event_date": "2026-11-05", "url": "https://WWW.example.org/event/?utm_source=x"},
+    "right": {"source_key": "feed:b", "external_id": "b", "title": "PyData", "event_date": "2026-11-05", "url": "http://example.org/event"}
+  },
+  {
+    "name": "same_title_and_date",
+    "expected": "MATCH",
+    "left": {"source_key": "feed:a", "external_id": "a", "title": "PyData London", "event_date": "2026-11-05"},
+    "right": {"source_key": "feed:b", "external_id": "b", "title": "PyData London", "event_date": "2026-11-05"}
+  },
+  {
+    "name": "same_title_recurring_dates",
+    "expected": "NO_MATCH",
+    "left": {"source_key": "feed:a", "external_id": "a", "title": "Recurring Summit", "event_date": "2026-11-05"},
+    "right": {"source_key": "feed:b", "external_id": "b", "title": "Recurring Summit", "event_date": "2026-11-06"}
+  },
+  {
+    "name": "same_venue_different_events",
+    "expected": "NO_MATCH",
+    "left": {"source_key": "feed:a", "external_id": "a", "title": "Workshop A", "event_date": "2026-11-05", "venue": "Main Hall"},
+    "right": {"source_key": "feed:b", "external_id": "b", "title": "Workshop B", "event_date": "2026-11-05", "venue": "Main Hall"}
+  },
+  {
+    "name": "missing_date_same_title",
+    "expected": "UNCERTAIN",
+    "left": {"source_key": "feed:a", "external_id": "a", "title": "Undated Meetup"},
+    "right": {"source_key": "feed:b", "external_id": "b", "title": "Undated Meetup"}
+  },
+  {
+    "name": "different_urls_same_title_date",
+    "expected": "UNCERTAIN",
+    "left": {"source_key": "feed:a", "external_id": "a", "title": "Same Name", "event_date": "2026-11-05", "url": "https://example.org/a"},
+    "right": {"source_key": "feed:b", "external_id": "b", "title": "Same Name", "event_date": "2026-11-05", "url": "https://example.org/b"}
+  },
+  {
+    "name": "conflicting_dates_same_url",
+    "expected": "UNCERTAIN",
+    "left": {"source_key": "feed:a", "external_id": "a", "title": "Rescheduled", "event_date": "2026-11-05", "url": "https://example.org/event"},
+    "right": {"source_key": "feed:b", "external_id": "b", "title": "Rescheduled", "event_date": "2026-11-06", "url": "https://example.org/event"}
+  }
+]

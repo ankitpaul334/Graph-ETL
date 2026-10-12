@@ -6,13 +6,26 @@ EXTRACTION_VERSION = "1"
 NORMALIZATION_VERSION = "1"
 
 
+class EventClassification(StrEnum):
+    EVENT_CONFIRMED_BY_SOURCE = "EVENT_CONFIRMED_BY_SOURCE"
+    EVENT_POSSIBLE = "EVENT_POSSIBLE"
+    NOT_EVENT = "NOT_EVENT"
+    EXTRACTION_FAILED = "EXTRACTION_FAILED"
+
+
+class ExtractionOutcomeStatus(StrEnum):
+    SUCCEEDED = "SUCCEEDED"
+    SUCCEEDED_WITH_ERRORS = "SUCCEEDED_WITH_ERRORS"
+    FAILED = "FAILED"
+    SKIPPED = "SKIPPED"
+
+
 class NormalizationStatus(StrEnum):
     MISSING = "missing"
     NORMALIZED = "normalized"
     DATE_ONLY = "date_only"
     TIMEZONE_AMBIGUOUS = "timezone_ambiguous"
     INVALID = "invalid"
-    RAW_ONLY = "raw_only"
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,23 +73,12 @@ class CandidateField:
 class CandidateDraft:
     observation_id: int
     candidate_ordinal: int
+    candidate_slot_key: str
     candidate_key: str
     external_id: str
+    classification: str
+    classification_reason: str
     fields: tuple[CandidateField, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class ExtractionRun:
-    id: int
-    extraction_version: str
-    normalization_version: str
-    status: str
-    started_at: str
-    completed_at: str | None
-    observations_processed: int
-    candidates_created: int
-    candidates_existing: int
-    error: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,3 +89,5 @@ class ExtractionRunResult:
     observations_processed: int
     candidates_created: int
     candidates_existing: int
+    observations_with_errors: int
+    observations_skipped: int

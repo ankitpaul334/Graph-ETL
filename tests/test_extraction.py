@@ -7,13 +7,13 @@ import unittest
 from graph_etl.domain import Source, SourceKind
 from graph_etl.extraction import (
     EventCandidateExtractor,
-    ExtractionError,
     ExtractionService,
 )
 from graph_etl.extraction.models import StoredObservation, StoredObservationField
 from graph_etl.ingestion.models import FieldValue, FetchedDocument, ParsedEntry, ParsedFeed
 from graph_etl.ingestion.service import IngestionService
 from graph_etl.persistence.database import Database
+from helpers import StubClient
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -86,6 +86,102 @@ class EventCandidateExtractorTests(unittest.TestCase):
             ].normalized_value,
         )
 
+    def test_classifies_source_confirmed_possible_and_non_event_items(self) -> None:
+        extractor = EventCandidateExtractor()
+        confirmed = extractor.extract(
+            stored_observation(
+                1,
+                "confirmed",
+                [
+                    {
+                        "name": "title",
+                        "raw_value": "Conference",
+                        "locator": "fixture:title",
+                        "is_present": True,
+                    },
+                    {
+                        "name": "event_date",
+                        "raw_value": "2026-11-05",
+                        "locator": "fixture:event-date",
+                        "is_present": True,
+                    },
+                ],
+            )
+        )
+        possible = extractor.extract(
+            stored_observation(
+                2,
+                "possible",
+                [
+                    {
+                        "name": "title",
+                        "raw_value": "Community post",
+                        "locator": "fixture:title",
+                        "is_present": True,
+                    }
+                ],
+            )
+        )
+        not_event = extractor.extract(
+            stored_observation(
+                3,
+                "not-event",
+                [
+                    {
+                        "name": "title",
+                        "raw_value": "Release notes",
+                        "locator": "fixture:title",
+                        "is_present": True,
+                    },
+                    {
+                        "name": "classification",
+                        "raw_value": "article",
+                        "locator": "fixture:classification",
+                        "is_present": True,
+                    },
+                ],
+            )
+        )
+
+        self.assertEqual("EVENT_CONFIRMED_BY_SOURCE", confirmed[0].classification)
+        self.assertEqual("EVENT_POSSIBLE", possible[0].classification)
+        self.assertEqual("NOT_EVENT", not_event[0].classification)
+
+    def test_candidate_slot_identity_does_not_use_ordinal(self) -> None:
+        extractor = EventCandidateExtractor()
+        first = extractor.extract(
+            stored_observation(
+                1,
+                "same-slot",
+                [
+                    {
+                        "name": "event_date",
+                        "field_ordinal": 0,
+                        "raw_value": "2026-11-05",
+                        "locator": "fixture:event[1]",
+                        "is_present": True,
+                    }
+                ],
+            )
+        )
+        reordered = extractor.extract(
+            stored_observation(
+                1,
+                "same-slot",
+                [
+                    {
+                        "name": "event_date",
+                        "field_ordinal": 7,
+                        "raw_value": "2026-11-05",
+                        "locator": "fixture:event[1]",
+                        "is_present": True,
+                    }
+                ],
+            )
+        )
+
+        self.assertEqual(first[0].candidate_slot_key, reordered[0].candidate_slot_key)
+
     def test_publication_timestamp_is_not_used_as_event_date(self) -> None:
         observation = stored_observation(
             1,
@@ -139,7 +235,7 @@ class ExtractionIntegrationTests(unittest.TestCase):
         external_id: str = "fixture-event-1",
     ) -> int:
         source_id = database.upsert_source(self.source)
-        payload = b"<fixture-document/>"
+        payload = f"<fixture-document>{external_id}</fixture-document>".encode()
         document_id, _ = database.save_raw_document(
             source_id,
             FetchedDocument(payload, "application/rss+xml"),
@@ -230,6 +326,10 @@ class ExtractionIntegrationTests(unittest.TestCase):
             self.assertEqual(2, len(candidates))
             candidate = candidates[0]
             self.assertEqual(observation_id, candidate["observation_id"])
+            self.assertEqual(
+                "EVENT_CONFIRMED_BY_SOURCE",
+                candidate["classification"],
+            )
             fields = {field["field_name"]: field for field in candidate["fields"]}
             self.assertEqual(
                 "  Example   Conference  ",
@@ -277,6 +377,10 @@ class ExtractionIntegrationTests(unittest.TestCase):
                 if field["field_name"] == "event_date"
             )
             self.assertEqual(["invalid", "timezone_ambiguous"], statuses)
+            self.assertEqual(
+                "SUCCEEDED_WITH_ERRORS",
+                database.query_extraction_outcomes()[0]["status"],
+            )
             self.assertTrue(
                 all(
                     field["normalized_value"] is None
@@ -296,27 +400,112 @@ class ExtractionIntegrationTests(unittest.TestCase):
                 ).fetchone()[0],
             )
 
-    def test_extraction_failure_is_recorded_on_run(self) -> None:
+    def test_extraction_failure_is_recorded_per_observation(self) -> None:
         with Database(self.database_path) as database:
             self._seed_observation(database, self.fixture["fields"])
-            with self.assertRaises(ExtractionError):
-                ExtractionService(database, extractor=FailingExtractor()).run()
+            result = ExtractionService(
+                database,
+                extractor=FailingExtractor(),
+            ).run()
 
+            self.assertEqual(1, result.observations_with_errors)
             run = database.connection.execute(
-                "SELECT status, error FROM extraction_runs"
+                """
+                SELECT status, observations_with_errors
+                FROM extraction_runs
+                """
             ).fetchone()
-            self.assertEqual("failed", run["status"])
-            self.assertIn("synthetic extractor failure", run["error"])
+            self.assertEqual("succeeded", run["status"])
+            self.assertEqual(1, run["observations_with_errors"])
+            outcome = database.connection.execute(
+                """
+                SELECT status, event_classification, error
+                FROM extraction_observation_outcomes
+                """
+            ).fetchone()
+            self.assertEqual("FAILED", outcome["status"])
+            self.assertEqual("EXTRACTION_FAILED", outcome["event_classification"])
+            self.assertIn("synthetic extractor failure", outcome["error"])
+            self.assertEqual(
+                0,
+                database.connection.execute(
+                    "SELECT COUNT(*) FROM event_candidates"
+                ).fetchone()[0],
+            )
+
+    def test_empty_extraction_output_is_recorded_as_skipped(self) -> None:
+        class SkippingExtractor(EventCandidateExtractor):
+            def extract(self, observation):
+                del observation
+                return ()
+
+        with Database(self.database_path) as database:
+            observation_id = self._seed_observation(
+                database,
+                self.fixture["fields"],
+            )
+            result = ExtractionService(
+                database,
+                extractor=SkippingExtractor(),
+            ).run()
+
+            self.assertEqual(1, result.observations_skipped)
+            self.assertEqual(
+                "SKIPPED",
+                database.query_extraction_outcomes()[0]["status"],
+            )
+            self.assertEqual(observation_id, database.query_extraction_outcomes()[0]["observation_id"])
+
+    def test_one_bad_observation_does_not_abort_other_observations(self) -> None:
+        class SelectiveFailingExtractor(EventCandidateExtractor):
+            def __init__(self, failing_observation_id: int) -> None:
+                super().__init__()
+                self.failing_observation_id = failing_observation_id
+
+            def extract(self, observation):
+                if observation.id == self.failing_observation_id:
+                    raise ValueError("selective extraction failure")
+                return super().extract(observation)
+
+        with Database(self.database_path) as database:
+            good_id = self._seed_observation(
+                database,
+                self.fixture["fields"],
+                external_id="good-observation",
+            )
+            bad_id = self._seed_observation(
+                database,
+                [
+                    {
+                        "name": "title",
+                        "raw_value": "Bad observation",
+                        "locator": "fixture:title",
+                        "is_present": True,
+                    }
+                ],
+                external_id="bad-observation",
+            )
+            result = ExtractionService(
+                database,
+                extractor=SelectiveFailingExtractor(bad_id),
+            ).run()
+
+            self.assertEqual(2, result.observations_processed)
+            self.assertEqual(1, result.observations_with_errors)
+            self.assertGreaterEqual(result.candidates_created, 1)
+            outcomes = {
+                row["observation_id"]: row["status"]
+                for row in database.connection.execute(
+                    """
+                    SELECT observation_id, status
+                    FROM extraction_observation_outcomes
+                    """
+                )
+            }
+            self.assertEqual("SUCCEEDED", outcomes[good_id])
+            self.assertEqual("FAILED", outcomes[bad_id])
 
     def test_explicit_event_date_elements_create_multiple_candidates(self) -> None:
-        class StubClient:
-            def __init__(self, payload: bytes) -> None:
-                self.payload = payload
-
-            def fetch(self, uri: str, *, timeout: float) -> FetchedDocument:
-                del uri, timeout
-                return FetchedDocument(self.payload, "application/rss+xml")
-
         source = Source(
             key="feed:event-dates",
             name="Event Dates",
@@ -343,14 +532,6 @@ class ExtractionIntegrationTests(unittest.TestCase):
             self.assertEqual(["date_only", "normalized"], statuses)
 
     def test_real_rss_atom_and_rdf_observations_extract_candidates(self) -> None:
-        class StubClient:
-            def __init__(self, payload: bytes) -> None:
-                self.payload = payload
-
-            def fetch(self, uri: str, *, timeout: float) -> FetchedDocument:
-                del uri, timeout
-                return FetchedDocument(self.payload, "application/xml")
-
         with Database(self.database_path) as database:
             for format_name in ("rss", "atom", "rdf"):
                 source = Source(
@@ -362,7 +543,7 @@ class ExtractionIntegrationTests(unittest.TestCase):
                 payload = (FIXTURES / f"{format_name}.xml").read_bytes()
                 ingestion = IngestionService(
                     database,
-                    StubClient(payload),
+                    StubClient(payload, content_type="application/xml"),
                     sleep=lambda _: None,
                 )
                 ingestion.ingest(source)

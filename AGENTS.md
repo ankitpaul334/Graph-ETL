@@ -1,58 +1,50 @@
-# Project Instructions
+# Agent Instructions
 
-## Purpose
+## Startup
 
-Build a source-agnostic developer and technology event intelligence pipeline. Ingest heterogeneous public information, preserve raw observations and provenance, extract and normalize event candidates, resolve duplicates conservatively, and maintain canonical event history for later search and graph projections.
+1. Read `README.md`, `PROJECT_STATE.md`, `WORKFLOW.md`, and this file.
+2. Inspect `git status`, the relevant source modules, schema migrations, and tests.
+3. Run the narrowest relevant tests before making changes.
+4. Preserve uncommitted work and do not implement unrelated product scope.
 
-## Architecture
+## Architecture Principles
 
-- Use Python 3.11+ and SQLite as the initial relational source of truth.
-- Keep `graph_etl/domain`, `graph_etl/ingestion`, `graph_etl/extraction`, `graph_etl/resolution`, `graph_etl/persistence`, and future orchestration modules separate.
-- Build around `Source`, `Observation`, `EventCandidate`, `CanonicalEvent`, and `EventVersion` contracts.
-- Keep source adapters independent of persistence and orchestration.
-- Preserve raw payloads, source values, field locators, run outcomes, and processing versions for replay.
-- Keep any future graph projection replaceable; do not add a graph database without demonstrated graph-query requirements.
-- Do not add a frontend, cloud deployment, microservices, or scheduling infrastructure unless required by demonstrated workload.
+- Use Python 3.11+ and SQLite as the relational source of truth.
+- Keep ingestion, extraction, resolution, evaluation, and persistence modules separate.
+- Keep identity normalization in `graph_etl/identity.py`; do not reimplement it per stage.
+- Keep evaluation calling the production resolver so metrics reflect real behavior.
+- Keep migrations in `graph_etl/persistence/migrations.py` and stage writes in the matching store module.
+- Preserve raw payloads, source values, field locators, processing versions, and run outcomes for replay.
+- Keep publication timestamps separate from event dates.
+- Make extraction, normalization, and resolver versions immutable; upgrades create new outputs.
+- Classify event candidates separately from date completeness and record per-observation extraction outcomes.
+- Never infer cancellation or event status from missing data.
+- Never silently overwrite canonical values with missing or conflicting data.
+- Keep recurring instances distinct and prefer `REVIEW_REQUIRED` over uncertain merges.
+- Keep graph projection, external adapters, LLMs, embeddings, scheduling, and distributed infrastructure deferred unless explicitly required.
+- Use deterministic identities and content hashes for idempotency.
 
-## Conventions
+## Change Rules
 
-- Use `snake_case` for modules, functions, and variables; use `PascalCase` for classes and `UPPER_SNAKE_CASE` for constants.
-- Prefer the Python standard library and small cohesive changes; add dependencies only when a concrete requirement justifies them.
-- Use UTC RFC 3339 timestamps and retain source timezone text separately.
-- Keep publication timestamps separate from event dates; do not substitute one for the other.
-- Make extraction and normalization versions immutable; a version upgrade creates new candidate outputs without overwriting prior outputs.
-- Preserve raw field values, normalized values, normalization status, and source field locators together.
-- Use deterministic identifiers and content hashes for idempotency.
-- Never silently overwrite known canonical values with missing or conflicting source data.
-- Keep recurring event instances distinct and leave ambiguous entity matches unresolved.
-- Validate untrusted input, bound response sizes, use least privilege, and keep secrets out of source, logs, and chat.
-
-## Commands
-
-- Test: `python -m unittest discover -s tests -v`
-- Syntax check: `python -m compileall -q graph_etl tests`
-- CLI help: `python -m graph_etl --help`
-- Run one feed: `python -m graph_etl ingest-rss --source-key <key> --name <name> --url <https-url> --database <path>`
-- Extract candidates: `python -m graph_etl extract --database <path> [--source-key <key>]`
-- Query candidates: `python -m graph_etl candidates --database <path> [--source-key <key>]`
-- Resolve candidates: `python -m graph_etl resolve --database <path> [--source-key <key>]`
-- Query canonical events: `python -m graph_etl canonical-events --database <path>`
-- No lint or static type-check command is configured yet; do not add tooling speculatively.
-
-## Constraints
-
-- Initial adapters are RSS/Atom, one permitted structured event API, and one permitted community source. Verify current availability and terms before implementation.
-- Ticketmaster requires an API key; keep it in local configuration and never request or commit it.
-- GitHub is a developer-ecosystem signal, not a direct event API.
-- Do not make X or Instagram scraping an MVP dependency.
+- Make the smallest cohesive change that satisfies the current milestone.
+- Use migrations for schema changes; never edit an applied migration.
+- Preserve raw candidates and prior resolution decisions.
+- Add tests for every behavioral change.
+- Do not commit generated databases, caches, credentials, or API keys.
 - Do not commit, push, or publish without explicit user approval.
-- Do not commit secrets, generated databases, caches, or local environment files.
 
-## Verification
+## Validation Commands
 
-- First run targeted parser and ingestion tests, then the full test suite and syntax check.
-- Cover malformed inputs, duplicate ingestion, retries, raw retention, provenance, changed feed versions, extraction idempotency, version upgrades, date ambiguity, and candidate provenance as milestones advance.
-- Before resolution milestones, add tests for timezone ambiguity, recurring instances, conflicting sources, ambiguous entities, replay, and auditable date, venue, and cancellation changes.
-- Resolution must auto-match only strong normalized identities, preserve unresolved candidates, and record canonical field changes or conflicts as immutable versions.
-- Review the final diff for unintended changes, debug code, secrets, and generated artifacts.
-- Report exact verification commands, results, changed files, and remaining risks.
+```powershell
+python -m unittest discover -s tests -v
+python -m compileall -q graph_etl tests
+python -m graph_etl --help
+python -m graph_etl evaluate --labels tests/fixtures/resolution_labels.json
+git diff --check
+```
+
+Run an isolated wheel build when packaging changes. No lint or static type-check command is configured; do not add tooling speculatively.
+
+## Completion Report
+
+Report exact commands and results, files changed, migration behavior, remaining risks, and checks not run. Replace `PROJECT_STATE.md` after each approved implementation commit rather than appending history.

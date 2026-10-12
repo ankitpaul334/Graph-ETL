@@ -7,12 +7,13 @@ RESOLVER_VERSION = "1"
 
 
 class ResolutionStatus(StrEnum):
-    CREATED = "created"
-    MATCHED = "matched"
-    UPDATED = "updated"
-    CONFLICT = "conflict"
-    AMBIGUOUS = "ambiguous"
-    UNMATCHED = "unmatched"
+    UNRESOLVED = "UNRESOLVED"
+    MATCHED = "MATCHED"
+    NEW_EVENT_PROPOSED = "NEW_EVENT_PROPOSED"
+    REVIEW_REQUIRED = "REVIEW_REQUIRED"
+    REJECTED = "REJECTED"
+    UPDATED = "UPDATED"
+    CONFLICT = "CONFLICT"
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +31,7 @@ class ResolutionCandidate:
     id: int
     source_key: str
     external_id: str
+    classification: str
     fields: tuple[CandidateFieldValue, ...]
 
 
@@ -38,6 +40,8 @@ class CanonicalSnapshot:
     id: int
     identity_key: str
     title_key: str
+    source_identity_key: str | None
+    url_key: str | None
     snapshot: Mapping[str, str | None]
 
 
@@ -45,8 +49,9 @@ class CanonicalSnapshot:
 class CandidateAnalysis:
     snapshot: Mapping[str, str | None]
     identity_key: str | None
+    source_identity_key: str | None
+    url_key: str | None
     title_key: str | None
-    event_date_key: str | None
     missing_fields: tuple[str, ...]
     ambiguous_fields: tuple[str, ...]
 
@@ -61,21 +66,8 @@ class ResolutionDecision:
     snapshot: Mapping[str, str | None]
     reason: str
     conflict_fields: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True, slots=True)
-class ResolutionRun:
-    id: int
-    resolver_version: str
-    status: str
-    started_at: str
-    completed_at: str | None
-    candidates_processed: int
-    decisions_created: int
-    decisions_existing: int
-    conflicts: int
-    unresolved: int
-    error: str | None
+    source_identity_key: str | None = None
+    url_key: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

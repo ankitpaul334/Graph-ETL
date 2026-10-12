@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, datetime
 import json
 from typing import Any
@@ -57,17 +58,30 @@ class ResolutionService:
                     analysis.identity_key
                 )
                 identity_match = self._snapshot(identity_row)
+                source_match = self._snapshot(
+                    self.database.find_canonical_by_source_identity(
+                        analysis.source_identity_key
+                    )
+                )
+                url_rows = self.database.find_canonical_by_url(analysis.url_key)
+                url_match = self._snapshot(url_rows[0]) if len(url_rows) == 1 else None
                 title_matches = tuple(
                     self._snapshot(row)
                     for row in self.database.find_canonical_by_title(
                         analysis.title_key
                     )
                 )
-                decision = self.resolver.decide(
-                    candidate,
-                    analysis,
-                    identity_match,
-                    title_matches,
+                decision = replace(
+                    self.resolver.decide(
+                        candidate,
+                        analysis,
+                        identity_match,
+                        source_match,
+                        url_match,
+                        title_matches,
+                    ),
+                    source_identity_key=analysis.source_identity_key,
+                    url_key=analysis.url_key,
                 )
                 decision_created, decision_existing, decision_conflicts, decision_unresolved = (
                     self.database.persist_resolution(run_id, (decision,))
@@ -106,6 +120,16 @@ class ResolutionService:
             id=int(row["id"]),
             identity_key=str(row["identity_key"]),
             title_key=str(row["title_key"]),
+            source_identity_key=(
+                str(row["source_identity_key"])
+                if row["source_identity_key"] is not None
+                else None
+            ),
+            url_key=(
+                str(row["url_key"])
+                if row["url_key"] is not None
+                else None
+            ),
             snapshot=json.loads(str(row["snapshot_json"])),
         )
 
@@ -118,6 +142,7 @@ class ResolutionService:
                 {
                     "source_key": row["source_key"],
                     "external_id": row["source_external_id"],
+                    "classification": row["classification"],
                     "fields": [],
                 },
             )
@@ -136,6 +161,7 @@ class ResolutionService:
                 id=candidate_id,
                 source_key=record["source_key"],
                 external_id=record["external_id"],
+                classification=record["classification"],
                 fields=tuple(record["fields"]),
             )
             for candidate_id, record in grouped.items()

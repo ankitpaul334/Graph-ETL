@@ -12,21 +12,10 @@ from graph_etl.ingestion.models import (
 )
 from graph_etl.ingestion.service import IngestionService
 from graph_etl.persistence.database import Database
+from helpers import StubClient
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
-
-
-class StubClient:
-    def __init__(self, *outcomes: FetchedDocument | SourceFetchError) -> None:
-        self.outcomes = list(outcomes)
-
-    def fetch(self, uri: str, *, timeout: float) -> FetchedDocument:
-        del uri, timeout
-        outcome = self.outcomes.pop(0)
-        if isinstance(outcome, SourceFetchError):
-            raise outcome
-        return outcome
 
 
 class IngestionServiceTests(unittest.TestCase):
